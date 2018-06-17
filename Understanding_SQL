@@ -1,0 +1,509 @@
+A relational database is a way to store and manipulate information. Databases are arranged as tables. Each table has columns (also known as fields) that describe the data, and rows (also known as records) which contain the data.
+
+Every database manager — Oracle, IBM DB2, PostgreSQL, MySQL, Microsoft Access, and SQLite — stores data in a different way, so a database created with one cannot be used directly by another. However, every database manager can import and export data in a variety of formats, like .csv, so it is possible to move information from one to another.
+
+
+==============Getting Into and Out Of SQLite================
+
+sqlite3 survey.db
+
+The SQLite command is sqlite3 and you are telling SQLite to open up the survey.db. You need to specify the .db file otherwise, SQLite will open up a temporary, empty database.
+
+To get out of SQLite, type out .exit or .quit. For some terminals, Ctrl-D can also work. If you forget any SQLite . (dot) command, type .help.
+
+All SQLite-specific commands are prefixed with a . to distinguish them from SQL commands. Type .tables to list the tables in the database.
+
+
+sqlite> .tables
+Person   Site     Survey   Visited
+
+
+You can change some SQLite settings to make the output easier to read. First, set the output mode to display left-aligned columns. Then turn on the display of column headers.
+
+.mode column
+.header on
+
+sqlite> select family, personal from Person;
+
+One convention is to use UPPER CASE for SQL statements, to distinguish them from tables and column names. This is the convention that we will use for this lesson.
+
+While we are on the topic of SQL’s syntax, one aspect of SQL’s syntax that can frustrate novices and experts alike is forgetting to finish a command with ; (semicolon). When you press enter for a command without adding the ; to the end, it can look something like this:
+
+SELECT id FROM Person
+...>
+...>
+This is SQL’s prompt, where it is waiting for additional commands or for a ; to let SQL know to finish. This is easy to fix! Just type ; and press enter!
+
+================Sorting and Removing Duplicates==============
+
+what kind of quantity measurements were taken at each site;
+
+SELECT quant FROM survey;
+
+SELECT DISTINCT quant FROM survey;
+
+If we want to determine which visit (stored in the taken column) have which quant measurement, we can use the DISTINCT keyword on multiple columns. If we select more than one column, distinct sets of values are returned (in this case pairs, because we are selecting two columns):
+
+SELECT DISTINCT taken, quant FROM Survey;
+
+Our next task is to identify the scientists on the expedition by looking at the Person table
+
+SELECT * FROM person ORDER BY id; > BY DEFAULT SORTED IN INCREASING ORDER
+
+SELECT * FROM person ORDER BY id DESC;
+
+In order to look at which scientist measured quantities during each visit, we can look again at the Survey table. We can also sort on several fields at once. For example, this query sorts results first in ascending order by taken, and then in descending order by person within each group of equal taken values:
+
+SELECT taken, person, quant FROM Survey ORDER BY taken ASC, person DESC;
+
+Looking at the table, it seems like some scientists specialized in certain kinds of measurements. We can examine which scientists performed which measurements by selecting the appropriate columns and removing duplicates.
+
+SELECT DISTINCT quant, person FROM Survey ORDER BY quant ASC;
+
+
+======================== Filtering===========================
+
+One of the most powerful features of a database is the ability to filter data, i.e., to select only those records that match certain criteria.
+
+SELECT * FROM Visited WHERE site='DR-1';
+
+The database manager executes this query in two stages. First, it checks at each row in the Visited table to see which ones satisfy the WHERE. It then uses the column names following the SELECT keyword to determine which columns to display
+
+SELECT id FROM Visited WHERE site='DR-1';
+
+We can use many other Boolean operators to filter our data. For example, we can ask for all information from the DR-1 site collected before 1930:
+
+SELECT * FROM Visited WHERE site='DR-1' AND
+dated<'1930-01-01';
+
+Most database managers have a special data type for dates. In fact, many have two: one for dates, such as “May 31, 1971”, and one for durations, such as “31 days”. SQLite doesn’t: instead, it stores dates as either text (in the ISO-8601 standard format “YYYY-MM-DD HH:MM:SS.SSSS”), real numbers (Julian days, the number of days since November 24, 4714 BCE), or integers (Unix time, the number of seconds since midnight, January 1, 1970). If this sounds complicated, it is, but not nearly as complicated as figuring out historical dates in Sweden.
+
+If we want to find out what measurements were taken by either Lake or Roerich, we can combine the tests on their names using OR:
+
+SELECT * FROM Survey WHERE person='lake' OR person='roe';
+
+Alternatively, we can use IN to see if a value is in a specific set:
+
+SELECT * FROM Survey WHERE person IN ('lake', 'roe');
+
+We can combine AND with OR, but we need to be careful about which operator is executed first. We should use parentheses
+
+SELECT * FROM Survey WHERE quant='sal' AND (person='lake' OR person='roe');
+
+Or we can write this: 
+
+SELECT * FROM Survey WHERE quant='sal' AND person IN ('lake', 'roe');
+
+We can also filter by partial matches. For example, if we want to know something just about the site names beginning with “DR” we can use the LIKE keyword. The percent symbol acts as a wildcard, matching any characters in that place. It can be used at the beginning, middle, or end of the string:
+
+SELECT * FROM Visited WHERE site LIKE 'DR%';
+
+The best way to achieve quick turnaround (for growing query method) is often to put a subset of data in a temporary database and run our queries against that, or to fill a small database with synthesized records. For example, instead of trying our queries against an actual database of 20 million Australians, we could run it against a sample of ten thousand, or write a small program to generate ten thousand random (but plausible) records and use that.
+
+
+
+'a' LIKE 'a'
+'a' LIKE '%a'
+'beta' LIKE '%a'
+'alpha' LIKE 'a%%'
+'alpha' LIKE 'a%p%'
+
+All wildcard will result in true because True because the wildcard can match zero or more characters.
+
+
+================ Calculating new values =====================
+
+After carefully re-reading the expedition logs, we realize that the radiation measurements they report may need to be corrected upward by 5%. Rather than modifying the stored data, we can do this calculation on the fly as part of our query:
+
+
+SELECT 1.05 * reading FROM Survey WHERE quant='rad';
+
+As you can see from this example, though, the string describing our new field (generated from the equation) can become quite unwieldy. SQL allows us to rename our fields
+
+SELECT taken, round(5*(reading-32)/9, 2) as celcius FROM Survey WHERE quant='temp';
+
+We can also combine values from different fields, for example by using the string concatenation operator ||:
+
+SELECT personal || ' ' || family FROM Person;
+
+The Union operator combines the results of two queries.
+
+
+
+SELECT * FROM Person WHERE id='dyer' UNION SELECT * FROM Person WHERE id='roe';
+
+SELECT taken,reading FROM Survey WHERE person!='roe' AND quant='sal' UNION SELECT taken,reading / 100 FROM Survey WHERE person='roe' AND quant='sal' ORDER BY taken ASC;
+
+
+The site identifiers in the Visited table have two parts separated by a ‘-‘:
+
+SELECT DISTINCT site FROM Visited;
+site
+DR-1
+DR-3
+MSK-4
+Some major site identifiers (i.e. the letter codes) are two letters long and some are three. The “in string” function instr(X, Y) returns the 1-based index of the first occurrence of string Y in string X, or 0 if Y does not exist in X. The substring function substr(X, I, [L]) returns the substring of X starting at index I, with an optional length L. Use these two functions to produce a list of unique major site identifiers. (For this data, the list should contain only “DR” and “MSK”).
+
+SELECT DISTINCT substr(site, 1, instr(site, '-') - 1) AS MajorSite FROM Visited;
+
+===================== Missing Data ==========================
+
+Real-world data is never complete — there are always holes. Databases represent these holes using a special value called null. null is not zero, False, or the empty string; it is a one-of-a-kind value that means “nothing here”. Dealing with null requires a few special tricks and some careful thinking.
+
+Comparisons aren’t the only operations that behave this way with nulls. 1+null is null, 5*null is null, log(null) is null, and so on. In particular, comparing things to null with = and != produces null:
+
+null<'1930-01-01' is neither true nor false: null means, “We don’t know,” and if we don’t know the value on the left side of a comparison, we don’t know whether the comparison is true or false. Since databases represent “don’t know” as null, the value of null<'1930-01-01' is actually null. null>='1930-01-01' is also null because we can’t answer to that question either. 
+
+To check whether a value is null or not, we must use a special test IS NULL
+
+SELECT * FROM Visited WHERE dated IS NULL;
+
+OR its inverse is IS NOT NULL
+
+SELECT * FROM Visited WHERE dated IS NOT NULL;
+
+SELECT count(*) FROM visited; > RETURN 8 
+
+SELECT count(*) FROM visited WHERE dated IS NOT NULL; > RETURN 7
+
+The two commans says that null records in our databases
+
+
+Null values can cause headaches wherever they appear. For example, suppose we want to find all the salinity measurements that weren’t taken by Lake. It’s natural to write the query like this:
+
+SELECT * FROM Survey WHERE quant='sal' AND person!='lake';
+
+but this query filters omits the records where we don’t know who took the measurement. Once again, the reason is that when person is null, the != comparison produces null, so the record isn’t kept in our results. If we want to keep these records we need to add an explicit check:
+
+SELECT * FROM Survey WHERE quant='sal' AND (person!='lake' OR person IS NULL);
+
+We still have to decide whether this is the right thing to do or not. If we want to be absolutely sure that we aren’t including any measurements by Lake in our results, we need to exclude all the records for which we don’t know who did the work.
+
+n contrast to arithmetic or Boolean operators, aggregation functions that combine multiple values, such as min, max or avg, ignore null values. In the majority of cases, this is a desirable output: for example, unknown values are thus not affecting our data when we are averaging it.
+
+SELECT * FROM Visited ORDER BY dated ASC; > will also include results having null in dated, hence for omitting these null value from result we should write::
+
+SELECT * FROM Visited WHERE dated IS NOT NULL ORDER BY dated ASC;
+
+SELECT * FROM Visited WHERE dated IN ('1927-02-08', NULL); > does not include null result;
+
+======================== Aggregation ========================
+
+SELECT min(dated) FROM Visited;
+
+SELECT max(dated) FROM Visited;
+
+SELECT avg(reading) FROM Survey WHERE quant='sal';
+
+
+SELECT count(reading) FROM Survey WHERE quant='sal'; > Also count the null entry, Avg(col) = sum(col) / (count(col) - no of null entries)
+
+
+SELECT sum(reading) FROM Survey WHERE quant='sal';
+
+SELECT min(reading), max(reading) FROM Survey WHERE quant='sal' AND reading<=1.0;
+
+Another important fact is that when there are no values to aggregate — for example, where there are no rows satisfying the WHERE clause — aggregation’s result is “don’t know” rather than zero or some other arbitrary value:
+
+SELECT person, max(reading), sum(reading) FROM Survey WHERE quant='missing';
+
+person	max(reading)	sum(reading)
+-null-	-null-	-null-
+
+One final important feature of aggregation functions is that they are inconsistent with the rest of SQL in a very useful way. If we add two values, and one of them is null, the result is null. By extension, if we use sum to add all the values in a set, and any of those values are null, the result should also be null,but in reality it ignores null in summing a col or averaging a col(suppose the column contains 1,2,3,4,5,6,7,8,NULL) the sum will be 36, count will be 9 but avg will be 4.5. It’s much more useful, though, for aggregation functions to ignore null values and only combine those that are non-null. This behavior lets us write our queries as:
+
+SELECT min(dated) FROM Visited;
+
+min(dated)
+1927-02-08
+
+instead of always having to filter explicitly:
+
+SELECT min(dated) FROM Visited WHERE dated IS NOT NULL;
+
+min(dated)
+1927-02-08
+
+
+What we need to do is tell the database manager to aggregate the hours for each scientist separately using a GROUP BY clause:
+
+SELECT   person, count(reading), round(avg(reading), 2)
+FROM     Survey
+WHERE    quant='rad'
+GROUP BY person;
+
+GROUP BY does exactly what its name implies: groups all the records with the same value for the specified field together so that aggregation can process each batch separately. Since all the records in each batch have the same value for person, it no longer matters that the database manager is picking an arbitrary one to display alongside the aggregated reading values.
+
+Just as we can sort by multiple criteria at once, we can also group by multiple criteria. To get the average reading by scientist and quantity measured, for example, we just add another field to the GROUP BY clause:
+
+
+SELECT   person, quant, count(reading), round(avg(reading), 2)
+FROM     Survey
+GROUP BY person, quant;
+
+
+person	quant	count(reading)	round(avg(reading), 2)
+-null-	sal	1	0.06
+-null-	temp	1	-26.0
+dyer	rad	2	8.81
+dyer	sal	2	0.11
+lake	rad	2	1.82
+lake	sal	4	0.11
+lake	temp	1	-16.0
+pb	rad	3	6.66
+pb	temp	2	-20.0
+roe	rad	1	11.25
+roe	sal	2	32.05
+
+
+Let’s go one step further and remove all the entries where we don’t know who took the measurement:
+
+SELECT   person, quant, count(reading), round(avg(reading), 2)
+FROM     Survey
+WHERE    person IS NOT NULL
+GROUP BY person, quant
+ORDER BY person, quant;
+
+Looking more closely, this query:
+
+selected records from the Survey table where the person field was not null;
+
+grouped those records into subsets so that the person and quant values in each subset were the same;
+
+ordered those subsets first by person, and then within each sub-group by quant; and
+
+counted the number of records in each subset, calculated the average reading in each, and chose a person and quant value from each (it doesn’t matter which ones, since they’re all equal).
+
+
+SELECT reading - avg(reading) FROM Survey WHERE quant='rad';  > things to notice here it will return only one record becuase avg is valid for entire column hence output will only be last_reading - avg , avg
+
+The function group_concat(field, separator) concatenates all the values in a field using the specified separator character (or ‘,’ if the 
+separator isn’t specified).
+
+select group_concat(personal || ' ' || family) from person;
+
+=================== Combining Data ========================
+
+Select * from site JOIN visited;
+
+JOIN creates the cross product of two tables, i.e., it joins each record of one table with each record of the other table to give all possible combinations. Since there are three records in Site and eight in Visited, the join’s output has 24 records (3 * 8 = 24) . And since each table has three fields, the output has six fields (3 + 3 = 6).
+
+
+select site.*,visited.dated from site join visited  where site.name = visited.site and visited.dated is not null;
+
+SELECT * FROM Site JOIN Visited ON Site.name=Visited.site;
+
+If joining two tables is good, joining many tables must be better. In fact, we can join any number of tables simply by adding more JOIN clauses to our query, and more ON tests to filter out combinations of records that don’t make sense:
+
+select Person.personal, survey.quant , survey.reading,visited.site from person join survey on person.id = survey.person join visited on survey.taken = visited.id;
+
+
+the above query can be writted like this::
+
+select Person.personal, survey.quant , survey.taken, survey.reading,visited.site from person join survey join visited on person.id = survey.person AND  survey.taken = visited.id;
+
+
+We can tell which records from Site, Visited, and Survey correspond with each other because those tables contain primary keys and foreign keys. A primary key is a value, or combination of values, that uniquely identifies each record in a table. A foreign key is a value (or combination of values) from one table that identifies a unique record in another table. Another way of saying this is that a foreign key is the primary key of one table that appears in some other table. In our database, Person.id is the primary key in the Person table, while Survey.person is a foreign key relating the Survey table’s entries to entries in Person.
+
+
+Most database designers believe that every table should have a well-defined primary key. They also believe that this key should be separate from the data itself, so that if we ever need to change the data, we only need to make one change in one place. One easy way to do this is to create an arbitrary, unique ID for each record as we add it to the database.
+
+SELECT rowid, * FROM Person;
+
+
+rowid	id	personal	family
+1	dyer	William	Dyer
+2	pb	Frank	Pabodie
+3	lake	Anderson	Lake
+4	roe	Valentina	Roerich
+5	danforth	Frank	Danforth
+
+
+Write a query that lists all sites visited by people named “Frank”.
+
+
+  
+SELECT DISTINCT Site.name
+FROM Site JOIN Visited JOIN Survey JOIN Person
+ON Site.name=Visited.site
+AND Visited.id=Survey.taken
+AND Survey.person=Person.id
+WHERE Person.personal="Frank";
+
+Write a query that shows each site with exact location (lat, long) ordered by visited date, followed by personal name and family name of the person who visited the site and the type of measurement taken and its reading. Please avoid all null values. Tip: you should get 15 records with 8 fields.
+
+
+SELECT Site.name, Site.lat, Site.long, Person.personal, Person.family, Survey.quant, Survey.reading, Visited.dated
+FROM Site JOIN Visited JOIN Survey JOIN Person
+ON Site.name=Visited.site
+AND Visited.id=Survey.taken
+AND Survey.person=Person.id
+WHERE Survey.person IS NOT NULL
+AND Visited.dated IS NOT NULL
+ORDER BY Visited.dated;
+
+
+============================== Data Hygiene =================
+Read about Acid properties.
+================ Creating and Modifying Data ================
+
+If we want to create and modify data, we need to know two other sets of commands.
+
+The first pair are CREATE TABLE and DROP TABLE.
+
+CREATE TABLE Person(id text, personal text, family text);
+CREATE TABLE Site(name text, lat real, long real);
+CREATE TABLE Visited(id integer, site text, dated text);
+CREATE TABLE Survey(taken integer, person text, quant real, reading real);
+
+We can get rid of one of our tables using:
+
+DROP TABLE Survey;
+
+Different database systems support different data types for table columns, but most provide the following:
+
+data type	use
+INTEGER	a signed integer
+REAL	a floating point number
+TEXT	a character string
+BLOB	a “binary large object”, such as an image
+
+
+When we create a table, we can specify several kinds of constraints on its columns. For example, a better definition for the Survey table would be:
+
+CREATE TABLE Survey(
+    taken   integer not null, -- where reading taken
+    person  text,             -- may not know who took it
+    quant   real not null,    -- the quantity measured
+    reading real not null,    -- the actual reading
+    primary key(taken, quant),
+    foreign key(taken) references Visited(id),
+    foreign key(person) references Person(id)
+);
+
+Once tables have been created, we can add, change, and remove records using our other set of commands, INSERT, UPDATE, and DELETE.
+
+The simplest form of INSERT statement lists values in order:
+
+INSERT INTO Site VALUES('DR-1', -49.85, -128.57);
+INSERT INTO Site VALUES('DR-3', -47.15, -126.72);
+INSERT INTO Site VALUES('MSK-4', -48.87, -123.40);
+We can also insert values into one table directly from another:
+
+CREATE TABLE JustLatLong(lat text, long text);
+INSERT INTO JustLatLong SELECT lat, long FROM Site;
+
+For example, if we made a mistake when entering the lat and long values of the last INSERT statement above:
+
+UPDATE Site SET lat=-47.87, long=-122.40 WHERE name='MSK-4';
+
+DELETE FROM Person WHERE id = 'danforth';
+
+we need to ensure that all references between tables can always be resolved correctly while deleting. 
+
+ If our database manager supports it, we can automate deleting while maintaining referential integrity using cascading delete.
+
+Many applications use a hybrid storage model instead of putting everything into a database: the actual data (such as astronomical images) is stored in files, while the database stores the files’ names, their modification dates, the region of the sky they cover, their spectral characteristics, and so on. This is also how most music player software is built: the database inside the application keeps track of the MP3 files, but the files themselves live on disk.
+
+SQLite has several administrative commands that aren’t part of the SQL standard. One of them is .dump, which prints the SQL commands needed to re-create the database. Another is .read, which reads a file created by .dump and restores the database.
+
+===================== Programming with Databases ===========
+
+Using python :: 
+
+connection = sqlite3.connect("survey.db")
+cursor = connection.cursor()
+cursor.execute("SELECT Site.lat, Site.long FROM Site;")
+results = cursor.fetchall()
+for r in results:
+    print(r)
+cursor.close()
+connection.close()
+
+
+
+import sqlite3
+
+def get_name(database_file, person_id):
+    query = "SELECT personal || ' ' || family FROM Person WHERE id='" + person_id + "';"
+
+    connection = sqlite3.connect(database_file)
+    cursor = connection.cursor()
+    cursor.execute(query)
+    results = cursor.fetchall()
+    cursor.close()
+    connection.close()
+
+    return results[0][0]
+
+print("Full name for dyer:", get_name('survey.db', 'dyer'))
+
+
+sql injection :: 
+
+If we insert this string into our query, the result is:
+
+SELECT personal || ' ' || family FROM Person WHERE id='dyer'; DROP TABLE Survey; SELECT '';
+If we execute this, it will erase one of the tables in our database.
+
+We can overcome this situation using prepared statement:
+
+import sqlite3
+
+def get_name(database_file, person_id):
+    query = "SELECT personal || ' ' || family FROM Person WHERE id=?;"
+
+    connection = sqlite3.connect(database_file)
+    cursor = connection.cursor()
+    cursor.execute(query, [person_id])
+    results = cursor.fetchall()
+    cursor.close()
+    connection.close()
+
+    return results[0][0]
+
+print("Full name for dyer:", get_name('survey.db', 'dyer'))
+
+We can also use sqlite3’s cursor to make changes to our database, such as inserting a new name. For instance, we can define a new function called add_name like so:
+
+Remember to commit the changes to save the changes to the databases
+
+import sqlite3
+
+def add_name(database_file, new_person):
+    query = "INSERT INTO Person VALUES (?, ?, ?);"
+
+    connection = sqlite3.connect(database_file)
+    cursor = connection.cursor()
+    cursor.execute(query, list(new_person))
+    cursor.close()
+    connection.commit()
+    connection.close()
+
+
+def get_name(database_file, person_id):
+    query = "SELECT personal || ' ' || family FROM Person WHERE id=?;"
+
+    connection = sqlite3.connect(database_file)
+    cursor = connection.cursor()
+    cursor.execute(query, [person_id])
+    results = cursor.fetchall()
+    cursor.close()
+    connection.close()
+
+    return results[0][0]
+
+# Insert a new name
+add_name('survey.db', ('barrett', 'Mary', 'Barrett'))
+# Check it exists
+print("Full name for barrett:", get_name('survey.db', 'barrett'))
+
+
+
+=========== Connecting DB using R(Remaining) ===============
+
+
+
+
+
+
